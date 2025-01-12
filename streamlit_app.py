@@ -36,7 +36,7 @@ def google_search(query):
     return search_results
 
 # Streamlit UI
-st.title("Web Search & Gemini AI Summarization Tool")
+st.title("Welcome to Karma Browser")
 st.sidebar.header("Features")
 action = st.sidebar.radio("Choose an Action", ["Search Web", "Use AI", "Both"])
 export_csv = st.sidebar.checkbox("Export Results as CSV")
@@ -45,7 +45,7 @@ export_csv = st.sidebar.checkbox("Export Results as CSV")
 st.sidebar.markdown(f"### Karma Points: {st.session_state['karma_points']}")
 
 if action == "Search Web":
-    st.header("Search the Web")
+    st.header("Search the Web & Earn Karma Points")
     query = st.text_input("Enter your search query:")
     if st.button("Search"):
         update_karma_points()
