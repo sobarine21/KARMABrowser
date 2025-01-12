@@ -56,7 +56,7 @@ def generate_pdf(summaries_df):
     return pdf.output(dest='S').encode('latin1')
 
 # Streamlit UI
-st.title("Welcome to Karma Browser")
+st.title("KARMA The AI powered Browser")
 st.sidebar.header("Features")
 action = st.sidebar.radio("Choose an Action", ["Search Web", "Use AI", "Both"])
 export_csv = st.sidebar.checkbox("Export Results as CSV")
