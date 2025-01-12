@@ -107,7 +107,7 @@ elif action == "Use AI":
             st.warning("Please provide text to summarize.")
 
 elif action == "Both":
-    st.header("Search the Web and Use Gemini AI for Summarization")
+    st.header("Search the Web & Earn Karma points")
     query = st.text_input("Enter your search query:")
     if st.button("Search and Summarize"):
         update_karma_points()
