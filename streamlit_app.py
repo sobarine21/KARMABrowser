@@ -4,6 +4,8 @@ import google.generativeai as genai
 from googleapiclient.discovery import build
 import requests
 from bs4 import BeautifulSoup
+from sklearn.feature_extraction.text import TfidfVectorizer
+import numpy as np
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -21,9 +23,9 @@ def update_karma_points():
     st.session_state["karma_points"] += 1
 
 # Function to interact with Google Search API
-def google_search(query):
+def google_search(query, filters={}):
     service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
-    response = service.cse().list(q=query, cx=GOOGLE_CX).execute()
+    response = service.cse().list(q=query, cx=GOOGLE_CX, **filters).execute()
     results = response.get("items", [])
     search_results = []
 
@@ -34,6 +36,19 @@ def google_search(query):
             "Snippet": result.get("snippet"),
         })
     return search_results
+
+# Function to extract and summarize web content
+def summarize_content(web_text):
+    # Use AI summarization with multiple passes if needed
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    initial_summary = model.generate_content(web_text).text
+    # Further refine summary by extracting keywords
+    vectorizer = TfidfVectorizer(stop_words='english')
+    X = vectorizer.fit_transform([web_text])
+    sorted_indices = np.argsort(X.sum(axis=0).A1)[::-1]
+    important_keywords = [vectorizer.get_feature_names_out()[i] for i in sorted_indices[:5]]  # top 5 keywords
+    refined_summary = f"Keywords: {', '.join(important_keywords)}\n\n{initial_summary}"
+    return refined_summary
 
 # Streamlit UI
 st.title("Welcome to Karma Browser")
@@ -47,9 +62,12 @@ st.sidebar.markdown(f"### Karma Points: {st.session_state['karma_points']}")
 if action == "Search Web":
     st.header("Search the Web & Earn Karma Points")
     query = st.text_input("Enter your search query:")
+    filters = {
+        'dateRestrict': 'y[1]'  # Example: filter results from the last year
+    }
     if st.button("Search"):
         update_karma_points()
-        results = google_search(query)
+        results = google_search(query, filters)
         if results:
             st.success(f"Found {len(results)} results.")
             results_df = pd.DataFrame(results)
@@ -67,11 +85,9 @@ elif action == "Use AI":
         update_karma_points()
         if input_text:
             try:
-                # Load and configure the model for summarization
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(input_text)
+                summary = summarize_content(input_text)
                 st.subheader("Summary")
-                st.write(response.text)
+                st.write(summary)
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -80,10 +96,13 @@ elif action == "Use AI":
 elif action == "Both":
     st.header("Search the Web and Use Gemini AI for Summarization")
     query = st.text_input("Enter your search query:")
+    filters = {
+        'dateRestrict': 'y[1]'  # Filter for the last year, adjust as needed
+    }
     if st.button("Search and Summarize"):
         update_karma_points()
         # Step 1: Search Web
-        results = google_search(query)
+        results = google_search(query, filters)
         if results:
             st.success(f"Found {len(results)} results.")
             results_df = pd.DataFrame(results)
@@ -102,12 +121,11 @@ elif action == "Both":
                         paragraphs = soup.find_all("p")
                         web_text = " ".join([p.get_text() for p in paragraphs])
 
-                        # Generate summary with Gemini AI
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        ai_summary = model.generate_content(web_text)
-                        summaries.append({"URL": url, "Summary": ai_summary.text})
+                        # Generate refined summary
+                        ai_summary = summarize_content(web_text)
+                        summaries.append({"URL": url, "Summary": ai_summary})
                         st.markdown(f"**URL:** {url}")
-                        st.write(ai_summary.text)
+                        st.write(ai_summary)
                 except Exception as e:
                     st.error(f"Error processing URL {url}: {e}")
 
