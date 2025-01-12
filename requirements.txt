@@ -8,3 +8,4 @@ scikit-learn
 wordcloud 
 textblob
 langdetect
+fpdf
