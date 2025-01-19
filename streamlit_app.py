@@ -22,26 +22,26 @@ if "karma_points" not in st.session_state:
 def update_karma_points():
     st.session_state["karma_points"] += 1
 
-# Function to filter out irrelevant URLs
-def is_relevant_url(url):
-    irrelevant_domains = ["facebook.com", "twitter.com", "instagram.com", "pinterest.com", "ads.google.com"]
-    return not any(domain in url for domain in irrelevant_domains)
-
-# Function to interact with Google Search API
+# Function to interact with Google Search API with filtering
 def google_search(query):
     service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
     response = service.cse().list(q=query, cx=GOOGLE_CX).execute()
     results = response.get("items", [])
+    
+    # Filter results to remove irrelevant links (e.g., ads, short snippets)
     search_results = []
-
     for result in results:
-        url = result.get("link")
-        if is_relevant_url(url):
-            search_results.append({
-                "Title": result.get("title"),
-                "URL": url,
-                "Snippet": result.get("snippet"),
-            })
+        url = result.get("link", "")
+        if any(domain in url for domain in ["youtube.com", "ads.google.com"]):  # Add more irrelevant domains if needed
+            continue
+        snippet = result.get("snippet", "")
+        if len(snippet) < 50:  # Skip overly short snippets
+            continue
+        search_results.append({
+            "Title": result.get("title"),
+            "URL": url,
+            "Snippet": snippet,
+        })
     return search_results
 
 # Function to generate a PDF from summaries
@@ -52,18 +52,42 @@ def generate_pdf(summaries_df):
     pdf.set_font("Arial", size=12)
 
     # Title
+    pdf.set_font("Arial", style="B", size=14)
     pdf.cell(200, 10, txt="AI Summarized Web Results", ln=True, align='C')
+    pdf.set_font("Arial", size=12)
 
-    # Add each summary as a new line in the PDF
+    # Add each summary as a new section in the PDF
     for index, row in summaries_df.iterrows():
         pdf.ln(10)  # Line break
+        pdf.set_font("Arial", style="B", size=12)
         pdf.cell(200, 10, txt=f"URL: {row['URL']}", ln=True)
+        pdf.set_font("Arial", size=11)
         pdf.multi_cell(0, 10, txt=f"Summary: {row['Summary']}")
-    
     return pdf.output(dest='S').encode('latin1')
 
+# Function to summarize web content using AI
+def summarize_web_content(url):
+    try:
+        content_response = requests.get(url, timeout=10)
+        if content_response.status_code != 200:
+            return "Failed to fetch content."
+
+        # Parse HTML and extract meaningful text
+        soup = BeautifulSoup(content_response.text, "html.parser")
+        paragraphs = soup.find_all(["p", "article"])
+        web_text = " ".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30])
+        if not web_text:
+            return "No meaningful content extracted."
+
+        # Use Gemini AI to summarize
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_summary = model.generate_content(web_text)
+        return ai_summary.text
+    except Exception as e:
+        return f"Error summarizing content: {e}"
+
 # Streamlit UI
-st.title("KARMA: The AI-Powered Browser")
+st.title("KARMA - The AI Powered Browser")
 st.sidebar.header("Features")
 action = st.sidebar.radio("Choose an Action", ["Search Web", "Use AI", "Both"])
 export_csv = st.sidebar.checkbox("Export Results as CSV")
@@ -80,7 +104,7 @@ if action == "Search Web":
         update_karma_points()
         results = google_search(query)
         if results:
-            st.success(f"Found {len(results)} relevant results.")
+            st.success(f"Found {len(results)} filtered results.")
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
             if export_csv:
@@ -114,40 +138,29 @@ elif action == "Use AI":
             st.warning("Please provide text to summarize.")
 
 elif action == "Both":
-    st.header("Search the Web & Summarize")
+    st.header("Search the Web & Summarize Top Results")
     query = st.text_input("Enter your search query:")
     if st.button("Search and Summarize"):
         update_karma_points()
         # Step 1: Search Web
         results = google_search(query)
         if results:
-            st.success(f"Found {len(results)} relevant results.")
+            st.success(f"Found {len(results)} filtered results.")
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
 
-            # Step 2: Summarize Web Content
+            # Step 2: Summarize Top Results
             st.subheader("AI Summaries of Top Results")
             summaries = []
-            for result in results[:3]:  # Limiting to top 3 results for summarization
+            for result in results[:5]:  # Limit to top 5 results for summarization
                 url = result["URL"]
                 st.write(f"Analyzing: {url}")
-                try:
-                    content_response = requests.get(url, timeout=10)
-                    if content_response.status_code == 200:
-                        soup = BeautifulSoup(content_response.text, "html.parser")
-                        paragraphs = soup.find_all("p")
-                        web_text = " ".join([p.get_text() for p in paragraphs])
+                summary = summarize_web_content(url)
+                summaries.append({"URL": url, "Summary": summary})
+                st.markdown(f"**URL:** {url}")
+                st.write(summary)
 
-                        # Generate summary with Gemini AI
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        ai_summary = model.generate_content(web_text)
-                        summaries.append({"URL": url, "Summary": ai_summary.text})
-                        st.markdown(f"**URL:** {url}")
-                        st.write(ai_summary.text)
-                except Exception as e:
-                    st.error(f"Error processing URL {url}: {e}")
-
-            # Export summaries if available
+            # Check if summaries were successfully generated before exporting
             if summaries:
                 summaries_df = pd.DataFrame(summaries)
                 if export_csv:
