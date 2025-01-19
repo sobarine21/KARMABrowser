@@ -22,6 +22,11 @@ if "karma_points" not in st.session_state:
 def update_karma_points():
     st.session_state["karma_points"] += 1
 
+# Function to filter out irrelevant URLs
+def is_relevant_url(url):
+    irrelevant_domains = ["facebook.com", "twitter.com", "instagram.com", "pinterest.com", "ads.google.com"]
+    return not any(domain in url for domain in irrelevant_domains)
+
 # Function to interact with Google Search API
 def google_search(query):
     service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
@@ -30,11 +35,13 @@ def google_search(query):
     search_results = []
 
     for result in results:
-        search_results.append({
-            "Title": result.get("title"),
-            "URL": result.get("link"),
-            "Snippet": result.get("snippet"),
-        })
+        url = result.get("link")
+        if is_relevant_url(url):
+            search_results.append({
+                "Title": result.get("title"),
+                "URL": url,
+                "Snippet": result.get("snippet"),
+            })
     return search_results
 
 # Function to generate a PDF from summaries
@@ -56,7 +63,7 @@ def generate_pdf(summaries_df):
     return pdf.output(dest='S').encode('latin1')
 
 # Streamlit UI
-st.title("KARMA The AI powered Browser")
+st.title("KARMA: The AI-Powered Browser")
 st.sidebar.header("Features")
 action = st.sidebar.radio("Choose an Action", ["Search Web", "Use AI", "Both"])
 export_csv = st.sidebar.checkbox("Export Results as CSV")
@@ -73,7 +80,7 @@ if action == "Search Web":
         update_karma_points()
         results = google_search(query)
         if results:
-            st.success(f"Found {len(results)} results.")
+            st.success(f"Found {len(results)} relevant results.")
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
             if export_csv:
@@ -87,7 +94,7 @@ if action == "Search Web":
                 pdf = generate_pdf(results_df)
                 st.download_button(label="Download Results as PDF", data=pdf, file_name="search_results.pdf", mime="application/pdf")
         else:
-            st.warning("No results found.")
+            st.warning("No relevant results found.")
 
 elif action == "Use AI":
     st.header("Use Gemini AI for Summarization")
@@ -107,14 +114,14 @@ elif action == "Use AI":
             st.warning("Please provide text to summarize.")
 
 elif action == "Both":
-    st.header("Search the Web & Earn Karma points")
+    st.header("Search the Web & Summarize")
     query = st.text_input("Enter your search query:")
     if st.button("Search and Summarize"):
         update_karma_points()
         # Step 1: Search Web
         results = google_search(query)
         if results:
-            st.success(f"Found {len(results)} results.")
+            st.success(f"Found {len(results)} relevant results.")
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
 
@@ -140,11 +147,9 @@ elif action == "Both":
                 except Exception as e:
                     st.error(f"Error processing URL {url}: {e}")
 
-            # Check if summaries were successfully generated before proceeding with export
+            # Export summaries if available
             if summaries:
                 summaries_df = pd.DataFrame(summaries)
-
-                # Export options
                 if export_csv:
                     csv = summaries_df.to_csv(index=False)
                     st.download_button(label="Download Summaries as CSV", data=csv, file_name="summaries.csv", mime="text/csv")
@@ -158,7 +163,7 @@ elif action == "Both":
             else:
                 st.warning("No summaries available to export.")
         else:
-            st.warning("No results found.")
+            st.warning("No relevant results found.")
 
 # Footer
 st.sidebar.markdown("---")
