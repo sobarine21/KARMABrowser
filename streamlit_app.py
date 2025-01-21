@@ -128,7 +128,7 @@ elif action == "Use AI":
         if input_text:
             try:
                 # Load and configure the model for summarization
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.0-flash-exp')
                 response = model.generate_content(input_text)
                 st.subheader("Summary")
                 st.write(response.text)
