@@ -80,7 +80,7 @@ def summarize_web_content(url):
             return "No meaningful content extracted."
 
         # Use Gemini AI to summarize
-        model = genai.GenerativeModel('gemini-2-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         ai_summary = model.generate_content(web_text)
         return ai_summary.text
     except Exception as e:
