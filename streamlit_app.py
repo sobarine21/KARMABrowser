@@ -6,7 +6,6 @@ import requests
 from bs4 import BeautifulSoup
 from io import StringIO
 from fpdf import FPDF
-import re
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -23,46 +22,26 @@ if "karma_points" not in st.session_state:
 def update_karma_points():
     st.session_state["karma_points"] += 1
 
-# Function to interact with Google Search API with more robust filtering
+# Function to interact with Google Search API with filtering
 def google_search(query):
     service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
     response = service.cse().list(q=query, cx=GOOGLE_CX).execute()
     results = response.get("items", [])
     
-    # Additional filters to improve the relevance and quality of search results
+    # Filter results to remove irrelevant links (e.g., ads, short snippets)
     search_results = []
     for result in results:
         url = result.get("link", "")
+        if any(domain in url for domain in ["youtube.com", "ads.google.com"]):  # Add more irrelevant domains if needed
+            continue
         snippet = result.get("snippet", "")
-        
-        # Ignore unwanted domains (e.g., ads, YouTube, etc.)
-        if any(domain in url for domain in ["youtube.com", "ads.google.com"]):  
+        if len(snippet) < 50:  # Skip overly short snippets
             continue
-        
-        # Filter out short snippets and non-informative content
-        if len(snippet) < 50 or not re.search(r"\b(information|guide|summary|report)\b", snippet, re.IGNORECASE):
-            continue
-        
-        # Optional: Filter by additional keywords in snippet or title
-        if not re.search(r"\b(tech|news|guide|research|summary)\b", result.get("title", ""), re.IGNORECASE):
-            continue
-
-        # Ensure URL is not from a blacklisted domain
-        blacklisted_domains = ['example.com', 'spamdomain.com']
-        if any(domain in url for domain in blacklisted_domains):
-            continue
-
-        # Validate snippet and title lengths
-        if len(result.get("title", "")) < 5 or len(snippet) < 50:
-            continue
-        
-        # If snippet is long enough and contains relevant keywords, add it to the results
         search_results.append({
             "Title": result.get("title"),
             "URL": url,
             "Snippet": snippet,
         })
-    
     return search_results
 
 # Function to generate a PDF from summaries
@@ -86,34 +65,23 @@ def generate_pdf(summaries_df):
         pdf.multi_cell(0, 10, txt=f"Summary: {row['Summary']}")
     return pdf.output(dest='S').encode('latin1')
 
-# Function to summarize web content using AI with validations
+# Function to summarize web content using AI
 def summarize_web_content(url):
     try:
         content_response = requests.get(url, timeout=10)
         if content_response.status_code != 200:
             return "Failed to fetch content."
-        
+
         # Parse HTML and extract meaningful text
         soup = BeautifulSoup(content_response.text, "html.parser")
         paragraphs = soup.find_all(["p", "article"])
         web_text = " ".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30])
-        
-        # Additional validation: Ensure the content is non-empty and relevant
-        if not web_text or len(web_text.split()) < 50:
-            return "No meaningful content extracted or content is too short."
-        
+        if not web_text:
+            return "No meaningful content extracted."
+
         # Use Gemini AI to summarize
         model = genai.GenerativeModel('gemini-2-flash')
         ai_summary = model.generate_content(web_text)
-        
-        # Validation: Check if summary length is reasonable
-        if len(ai_summary.text.split()) < 30:
-            return "Summary is too short or lacks detail."
-
-        # Further validation of the summary's coherence and relevance
-        if len(re.findall(r'\w+', ai_summary.text)) < 50:
-            return "Generated summary seems to be lacking coherence."
-        
         return ai_summary.text
     except Exception as e:
         return f"Error summarizing content: {e}"
