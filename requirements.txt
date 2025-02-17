@@ -1,11 +1,9 @@
 streamlit
-pandas 
-google-api-python-client 
-google-generativeai 
-beautifulsoup4 
+google-generativeai
 requests
-scikit-learn
-wordcloud 
 textblob
-langdetect
-fpdf
+scikit-learn
+nltk
+langid
+wordcloud
+matplotlib
